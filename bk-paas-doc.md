@@ -1,6 +1,7 @@
 
 # 使用CentOS 7.x快速部署蓝鲸开源PAAS平台。
 
+
 ## 环境准备
 
 ### 1.系统初始化
@@ -194,33 +195,42 @@ DATABASES = {
 
 ## 使用screen启动服务
 
+   对于screen不熟悉的用户可以参考https://www.ibm.com/developerworks/cn/linux/l-cn-screen/index.html
+
 ### 启动paas
+```
 [root@paas-node-1 ~]# screen -t paas
 [root@paas-node-1 ~]# source /opt/runtime-paas/bin/activate
 (runtime-paas) [root@paas-node-1 ~]# cd /opt/bk-PaaS/paas-ce/paas/paas/
 (runtime-paas) [root@paas-node-1 paas]# python manage.py runserver 0.0.0.0:8001
-按Ctrl+A+D退出screen
+#按Ctrl+A+D退出screen
 
+```
 ### 启动login
+```
 [root@paas-node-1 ~]# screen -t login
 [root@paas-node-1 ~]# source /opt/runtime-login/bin/activate
 (runtime-login) [root@paas-node-1 ~]# cd /opt/bk-PaaS/paas-ce/paas/login/
 (runtime-login) [root@paas-node-1 login]# python manage.py runserver 0.0.0.0:8003
-按Ctrl+A+D退出screen
+#按Ctrl+A+D退出screen
+```
 
 ### 启动esb
+```
 [root@paas-node-1 ~]# screen -t esb
 [root@paas-node-1 ~]# source /opt/runtime-esb/bin/activate
 (runtime-esb) [root@paas-node-1 ~]# cd /opt/bk-PaaS/paas-ce/paas/esb/
 (runtime-esb) [root@paas-node-1 esb]# python manage.py runserver 0.0.0.0:8002
-按Ctrl+A+D退出screen
+#按Ctrl+A+D退出screen
+```
 
 ### 启动appengine
+```
 [root@paas-node-1 ~]# screen -t appengine
 [root@paas-node-1 ~]# source /opt/runtime-appengine/bin/activate
 (runtime-appengine) [root@paas-node-1 ~]# cd /opt/bk-PaaS/paas-ce/paas/appengine/
 (runtime-appengine) [root@paas-node-1 appengine]# python manage.py runserver 0.0.0.0:8000
-按Ctrl+A+D退出screen
-
+#按Ctrl+A+D退出screen
+```
 
 
