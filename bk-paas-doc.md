@@ -1,6 +1,9 @@
 
 # 使用CentOS 7.x快速部署蓝鲸开源PAAS平台。
 
+本文使用CentOS快速蓝鲸PAAS平台，使用系统默认自带的Python和Mariadb，最后统一使用screen进行启动。
+
+- 注意：仅用于快速部署和学习，不适用于生产环境，生产建议使用Supervisor和Nginx启动，并设置MySQL高可用和备份等。
 
 ## 环境准备
 
@@ -232,5 +235,3 @@ DATABASES = {
 (runtime-appengine) [root@paas-node-1 appengine]# python manage.py runserver 0.0.0.0:8000
 #按Ctrl+A+D退出screen
 ```
-
-
