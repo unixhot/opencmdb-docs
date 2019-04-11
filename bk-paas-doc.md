@@ -235,3 +235,33 @@ DATABASES = {
 (runtime-appengine) [root@paas-node-1 appengine]# python manage.py runserver 0.0.0.0:8000
 #按Ctrl+A+D退出screen
 ```
+
+## 使用Nignx配置访问
+
+### 配置Nginx
+
+```
+[root@paas-node-1 ~]# cd /opt/bk-PaaS/paas-ce/paas/examples/
+[root@paas-node-1 examples]# cp nginx_paas.conf /etc/nginx/conf.d/
+[root@paas-node-1 ~]# vim /etc/nginx/conf.d/nginx_paas.conf 
+#在location / 下面增加
+location /static {
+        proxy_pass http://OPEN_PAAS_LOGIN;
+        proxy_pass_header Server;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Scheme $scheme;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_read_timeout 600;
+    }
+[root@paas-node-1 ~]# nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[root@paas-node-1 ~]# systemctl start nginx
+```
+
+### 访问蓝鲸PAAS
+ - 设置本地Hosts绑定
+ - http://www.bking.com/
+ - 默认用户名密码：admin admin
