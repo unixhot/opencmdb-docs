@@ -1,9 +1,5 @@
 
-# 使用CentOS 7.x快速部署蓝鲸开源PAAS平台。
-
-本文使用CentOS快速蓝鲸PAAS平台，使用系统默认自带的Python和Mariadb，最后统一使用screen进行启动。
-
-- 注意：仅用于快速部署和学习，不适用于生产环境，生产建议使用Supervisor和Nginx启动，并设置MySQL高可用和备份等。
+# 使用CentOS 7.x快速部署技术运营中台。
 
 ## 环境准备
 
@@ -17,23 +13,53 @@ CentOS Linux release 7.6.1810 (Core)
 ### 2.安装依赖软件包
 ```
 [root@paas-node-1 ~]# yum install -y git mariadb mariadb-server nginx supervisor \
- python-pip pycrypto gcc glibc python-devel
+ python-pip pycrypto gcc glibc python-devel mongodb mongodb-server
 ```
 
-### 3.启动数据库并初始化
+### 3.初始化MySQL数据库
 ```
-[root@paas-node-1 ~]# systemctl start mariadb
+[root@paas-node-1 ~]# vim /etc/my.cnf
+default-storage-engine = innodb
+innodb_file_per_table
+collation-server = utf8_general_ci
+init-connect = 'SET NAMES utf8'
+character-set-server = utf8
+[root@paas-node-1 ~]# systemctl enable mariadb && systemctl start mariadb
 [root@paas-node-1 ~]# mysql_secure_installation 
 [root@paas-node-1 ~]# mysql -u root -p
-MariaDB [(none)]> CREATE DATABASE IF NOT EXISTS open_paas DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
-MariaDB [(none)]> grant all on open_paas.* to paas@localhost identified by 'open_paas';
+MariaDB [(none)]> CREATE DATABASE IF NOT EXISTS dev_paas DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+MariaDB [(none)]> grant all on dev_paas.* to paas@localhost identified by 'dev_paas';
 ```
 
-### 4.克隆代码
+### 4.初始化MongoDB数据库
+```
+[root@paas-node-1 ~]# systemctl enable mongod && systemctl start mongod
+[root@linux-node1 ~]# netstat -ntlp | grep 27017
+tcp        0      0 127.0.0.1:27017         0.0.0.0:*               LISTEN      28513/mongod
+[root@linux-node1 ~]# mongo
+> use cmdb
+switched to db cmdb
+> db.createUser({user: "cmdb",pwd: "cmdb",roles: [ { role: "readWrite", db: "cmdb" } ]});
+Successfully added user: {
+	"user" : "cmdb",
+	"roles" : [
+		{
+			"role" : "readWrite",
+			"db" : "cmdb"
+		}
+	]
+}
+> exit
+
+```
+
+### 5.克隆代码
 ```
 [root@paas-node-1 ~]# cd /opt
-[root@paas-node-1 opt]# git clone https://github.com/Tencent/bk-PaaS.git
+[root@paas-node-1 opt]# git clone git@git.womaiyun.com:womaiyun/dev-paas.git
 [root@paas-node-1 opt]# pip install virtualenv
+[root@ops ~]# cd /opt/dev-paas/
+[root@ops dev-paas]# mkdir paas-runtime
 ```
 
 ## 部署paas服务
@@ -41,33 +67,45 @@ MariaDB [(none)]> grant all on open_paas.* to paas@localhost identified by 'open
 ### 1.初始化Python虚拟环境
 ```
 # 创建Python虚拟环境
-[root@paas-node-1 opt]# virtualenv runtime-paas
+[root@ops ~]# cd /opt/dev-paas/paas-runtime/
+[root@ops paas-runtime]# virtualenv paas
+
 # 使用Python虚拟环境
-[root@paas-node-1 opt]# source /opt/runtime-paas/bin/activate
-(runtime-paas) [root@paas-node-1 opt]# cd /opt/bk-PaaS/paas-ce/paas/paas/
+[root@ops paas-runtime]# source /opt/dev-paas/paas-runtime/paas/bin/activate
+
 # 安装依赖软件包
-(runtime-paas) [root@paas-node-1 paas]# pip install -r requirements.txt 
+(paas) [root@ops paas]# cd /opt/dev-paas/paas-ce/paas/paas/
+(paas) [root@ops paas]# pip install -r requirements.txt 
 ```
+
 ### 2.配置paas
 
 - 修改数据库配置，可以根据需求修改域名和端口，这里保持默认。
 ```
+(paas) [root@ops paas]# cd conf/
+(paas) [root@ops conf]# cp settings_production.py.sample settings_production.py
+(paas) [root@ops conf]# vim settings_production.py
 (runtime-paas) [root@paas-node-1 paas]# vim conf/settings_development.py 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'open_paas',
+        'NAME': 'dev_paas',
         'USER': 'paas',
-        'PASSWORD': 'open_paas',
+        'PASSWORD': 'dev_paas',
         'HOST': '127.0.0.1',
         'PORT': '3306',
     }
 }
+
+PAAS_DOMAIN = 'dev.womaiyun.com'
+BK_COOKIE_DOMAIN = '.womaiyun.com'
 ```
 
 - 进行数据库初始化（如果遇到权限问题请检查数据库授权）
+
 ```
-(runtime-paas) [root@paas-node-1 paas]# python manage.py migrate
+(paas) [root@ops paas]# export BK_ENV="production"
+(paas) [root@ops paas]# python manage.py migrate
 ```
 退出python虚拟环境
 ```
@@ -80,37 +118,46 @@ DATABASES = {
 ### 1.初始化Python虚拟环境
 ```
 # 创建Python虚拟环境
-[root@paas-node-1 ~]# cd /opt/
-[root@paas-node-1 opt]# virtualenv runtime-login
+[root@ops ~]# cd /opt/dev-paas/paas-runtime/
+[root@ops paas-runtime]# virtualenv login
+
 # 使用Python虚拟环境
-[root@paas-node-1 opt]# source /opt/runtime-login/bin/activate
-(runtime-login) [root@paas-node-1 opt]# cd /opt/bk-PaaS/paas-ce/paas/login/
+[root@ops paas-runtime]# source /opt/dev-paas/paas-runtime/login/bin/activate
+(login) [root@ops paas-runtime]# cd /opt/dev-paas/paas-ce/paas/login
+
 # 安装依赖软件包
-(runtime-login) [root@paas-node-1 paas]# pip install -r requirements.txt 
+(login) [root@ops login]# pip install -r requirements.txt 
 ```
 
 ### 2.配置login
 
 - 修改数据库配置，可以根据需求修改域名和端口，这里保持默认。
+
 ```
-(runtime-login) [root@paas-node-1 login]# vim conf/settings_development.py 
+(login) [root@ops login]# cd conf/
+(login) [root@ops conf]# cp settings_production.py.sample settings_production.py
+(login) [root@ops conf]# vim settings_production.py
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'open_paas',
+        'NAME': 'dev_paas',
         'USER': 'paas',
-        'PASSWORD': 'open_paas',
+        'PASSWORD': 'dev_paas',
         'HOST': '127.0.0.1',
         'PORT': '3306',
     }
 }
+# cookie访问域
+BK_COOKIE_DOMAIN = '.womaiyun.com'
 ```
 
 - 进行数据库初始化（如果遇到权限问题请检查数据库授权）
 ```
-(runtime-login) [root@paas-node-1 login]# python manage.py migrate
+(login) [root@ops conf]# cd ..
+(login) [root@ops login]# export BK_ENV="production"
+(login) [root@ops login]# python manage.py migrate
 ```
-退出python虚拟环境
+#退出python虚拟环境
 ```
 (runtime-login) [root@paas-node-1 login]# deactivate
 ```
@@ -120,13 +167,16 @@ DATABASES = {
 ### 1.初始化Python虚拟环境
 ```
 # 创建Python虚拟环境
-[root@paas-node-1 ~]# cd /opt/
-[root@paas-node-1 opt]# virtualenv runtime-appengine
+[root@ops ~]# cd /opt/dev-paas/paas-runtime/
+[root@ops paas-runtime]# virtualenv appengine
+
 # 使用Python虚拟环境
 [root@paas-node-1 opt]# source /opt/runtime-appengine/bin/activate
 (runtime-appengine) [root@paas-node-1 opt]# cd /opt/bk-PaaS/paas-ce/paas/appengine/
+
 # 安装依赖软件包
-(runtime-appengine) [root@paas-node-1 paas]# pip install -r requirements.txt 
+(appengine) [root@ops paas-runtime]# cd /opt/dev-paas/paas-ce/paas/appengine/
+(appengine) [root@ops appengine]# pip install -r requirements.txt 
 ```
 
 ### 2.配置appengine
@@ -134,23 +184,22 @@ DATABASES = {
 - 修改数据库配置，可以根据需求修改域名和端口，这里保持默认。
 ```
 [root@paas-node-1 appengine]# vim controller/settings.py
+(appengine) [root@ops appengine]# vim controller/settings.py 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'open_paas',
+        'NAME': 'dev_paas',
         'USER': 'paas',
-        'PASSWORD': 'open_paas',
+        'PASSWORD': 'dev_paas',
         'HOST': 'localhost',
         'PORT': '3306',
     }
 }
 ```
 
-
-
 - 退出python虚拟环境
 ```
-(runtime-appengine) [root@paas-node-1 appengine]# deactivate
+(appengine) [root@ops appengine]# deactivate
 ```
 
 
@@ -159,21 +208,23 @@ DATABASES = {
 ### 1.初始化Python虚拟环境
 ```
 # 创建Python虚拟环境
-[root@paas-node-1 ~]# cd /opt/
-[root@paas-node-1 opt]# virtualenv runtime-esb
+[root@ops ~]# cd /opt/dev-paas/paas-runtime/
+[root@ops paas-runtime]# virtualenv esb
+
 # 使用Python虚拟环境
-[root@paas-node-1 opt]# source /opt/runtime-esb/bin/activate
-(runtime-esb) [root@paas-node-1 opt]# cd /opt/bk-PaaS/paas-ce/paas/esb/
+[root@ops paas-runtime]# source /opt/dev-paas/paas-runtime/esb/bin/activate
+
 # 安装依赖软件包
-(runtime-esb) [root@paas-node-1 paas]# pip install -r requirements.txt 
+(esb) [root@ops paas-runtime]# cd /opt/dev-paas/paas-ce/paas/esb/
+(esb) [root@ops esb]# pip install -r requirements.txt 
 ```
 
 ### 2.配置esb
 
 - 修改数据库配置，可以根据需求修改域名和端口，这里保持默认。
 ```
-(runtime-esb) [root@paas-node-1 esb]# cd configs/
-(runtime-esb) [root@paas-node-1 configs]# cp default_template.py default.py
+(esb) [root@ops esb]# cd configs/
+(esb) [root@ops configs]# cp default_template.py default.py
 (runtime-esb) [root@paas-node-1 configs]# vim default.py 
 DATABASES = {
     'default': {
@@ -188,13 +239,16 @@ DATABASES = {
 ```
 
 - 进行数据库初始化（如果遇到权限问题请检查数据库授权）
+
 ```
-(runtime-esb) [root@paas-node-1 esb]# python manage.py migrate
+(esb) [root@ops esb]# export BK_ENV="production"
+(esb) [root@ops esb]# python manage.py migrate
 ```
 退出python虚拟环境
 ```
-(runtime-esb) [root@paas-node-1 esb]# deactivate
+(esb) [root@ops esb]# deactivate
 ```
+
 
 ## 使用screen启动服务
 
@@ -263,5 +317,5 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 
 ### 访问蓝鲸PAAS
  - 设置本地Hosts绑定
- - http://www.bking.com/
+ - http://dev.womaiyun.com/
  - 默认用户名密码：admin admin
